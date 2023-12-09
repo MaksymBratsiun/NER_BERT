@@ -2,3 +2,5 @@
 poetry.lock
 .ipynb_checkpoints
 __pycache__/
+.save
+*.save
