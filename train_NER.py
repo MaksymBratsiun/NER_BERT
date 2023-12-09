@@ -1,9 +1,7 @@
 import torch
-# import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from transformers import BertTokenizer, BertForTokenClassification
-# from transformers import AdamW, get_linear_schedule_with_warmup
 from torch.utils.data import Dataset, DataLoader
 
 
@@ -73,33 +71,33 @@ def tokenized_data(data_input, tokenizer):
     res = []
     for sentence in data_input:
         sentence_tokenized = tokenizer.tokenize(sentence.strip())
-        splited_sentense = []
+        splited_sentence = []
         word = []
         for i in range(len(sentence_tokenized) - 1):
             if i != 0:
                 if sentence_tokenized[i].startswith("##"):
                     if not word:
-                        word.append(splited_sentense.pop())
+                        word.append(splited_sentence.pop())
                         word.append(sentence_tokenized[i].removeprefix("##"))
                     else:
                         word.append(sentence_tokenized[i].removeprefix("##"))
                 else:
                     if word:
-                        splited_sentense.append("".join(word))
+                        splited_sentence.append("".join(word))
                         word = []
-                        splited_sentense.append(sentence_tokenized[i])
+                        splited_sentence.append(sentence_tokenized[i])
                     else:
-                        splited_sentense.append(sentence_tokenized[i])
+                        splited_sentence.append(sentence_tokenized[i])
             else:
-                splited_sentense.append(sentence_tokenized[0])
+                splited_sentence.append(sentence_tokenized[0])
 
         masked_layer = []
-        for word in splited_sentense:
+        for word in splited_sentence:
             if word in labels_dict:
                 masked_layer.append(labels_dict[word])
             else:
                 masked_layer.append("O")
-        res.append(tokenize_and_preserve_labels(splited_sentense, masked_layer, tokenizer))
+        res.append(tokenize_and_preserve_labels(splited_sentence, masked_layer, tokenizer))
     return res
 
 
@@ -112,7 +110,7 @@ def split_punct(text, punct):
                 if j < len(r) - 1:
                     result.append(r[j] + " " + punct)
                 else:
-                    if r[j]:  # last part without "punct", if it have "punct" in the end than last part will be ""
+                    if r[j]:  # last part without "punct", if we have "punct" in the end than last part will be ""
                         result.append(r[j])
         else:
             result.append(i)
@@ -129,9 +127,9 @@ def train(epoch):
 
     for idx, batch in enumerate(training_loader):
 
-        ids = batch['ids'].to(device, dtype = torch.long)
-        mask = batch['mask'].to(device, dtype = torch.long)
-        targets = batch['targets'].to(device, dtype = torch.long)
+        ids = batch['ids'].to(device, dtype=torch.long)
+        mask = batch['mask'].to(device, dtype=torch.long)
+        targets = batch['targets'].to(device, dtype=torch.long)
 
         outputs = model(input_ids=ids, attention_mask=mask, labels=targets)
         loss, tr_logits = outputs.loss, outputs.logits
@@ -145,11 +143,11 @@ def train(epoch):
             print(f"Training loss per 100 training steps: {loss_step}")
 
         # compute training accuracy
-        flattened_targets = targets.view(-1) # shape (batch_size * seq_len,)
-        active_logits = tr_logits.view(-1, model.num_labels) # shape (batch_size * seq_len, num_labels)
-        flattened_predictions = torch.argmax(active_logits, axis=1) # shape (batch_size * seq_len,)
+        flattened_targets = targets.view(-1)  # shape (batch_size * seq_len,)
+        active_logits = tr_logits.view(-1, model.num_labels)  # shape (batch_size * seq_len, num_labels)
+        flattened_predictions = torch.argmax(active_logits, axis=1)  # shape (batch_size * seq_len,)
         # now, use mask to determine where we should compare predictions with targets (include [CLS]&[SEP])
-        active_accuracy = mask.view(-1) == 1 # active accuracy is also of shape (batch_size * seq_len,)
+        active_accuracy = mask.view(-1) == 1  # active accuracy is also of shape (batch_size * seq_len,)
         targets = torch.masked_select(flattened_targets, active_accuracy)
         predictions = torch.masked_select(flattened_predictions, active_accuracy)
 
@@ -160,9 +158,7 @@ def train(epoch):
         tr_accuracy += tmp_tr_accuracy
 
         # gradient clipping
-        torch.nn.utils.clip_grad_norm_(
-            parameters=model.parameters(), max_norm=MAX_GRAD_NORM
-        )
+        torch.nn.utils.clip_grad_norm_(parameters=model.parameters(), max_norm=MAX_GRAD_NORM)
 
         # backward pass
         optimizer.zero_grad()
@@ -186,9 +182,9 @@ def valid(model, testing_loader):
     with torch.no_grad():
         for idx, batch in enumerate(testing_loader):
 
-            ids = batch['ids'].to(device, dtype = torch.long)
-            mask = batch['mask'].to(device, dtype = torch.long)
-            targets = batch['targets'].to(device, dtype = torch.long)
+            ids = batch['ids'].to(device, dtype=torch.long)
+            mask = batch['mask'].to(device, dtype=torch.long)
+            targets = batch['targets'].to(device, dtype=torch.long)
 
             outputs = model(input_ids=ids, attention_mask=mask, labels=targets)
             loss, eval_logits = outputs.loss, outputs.logits
@@ -198,16 +194,16 @@ def valid(model, testing_loader):
             nb_eval_steps += 1
             nb_eval_examples += targets.size(0)
 
-            if idx % 100==0:
+            if idx % 100 == 0:
                 loss_step = eval_loss/nb_eval_steps
                 print(f"Validation loss per 100 evaluation steps: {loss_step}")
 
             # compute evaluation accuracy
-            flattened_targets = targets.view(-1) # shape (batch_size * seq_len,)
-            active_logits = eval_logits.view(-1, model.num_labels) # shape (batch_size * seq_len, num_labels)
-            flattened_predictions = torch.argmax(active_logits, axis=1) # shape (batch_size * seq_len,)
+            flattened_targets = targets.view(-1)  # shape (batch_size * seq_len,)
+            active_logits = eval_logits.view(-1, model.num_labels)  # shape (batch_size * seq_len, num_labels)
+            flattened_predictions = torch.argmax(active_logits, axis=1)  # shape (batch_size * seq_len,)
             # now, use mask to determine where we should compare predictions with targets (includes [CLS]&[SEP])
-            active_accuracy = mask.view(-1) == 1 # active accuracy is also of shape (batch_size * seq_len,)
+            active_accuracy = mask.view(-1) == 1  # active accuracy is also of shape (batch_size * seq_len,)
             targets = torch.masked_select(flattened_targets, active_accuracy)
             predictions = torch.masked_select(flattened_predictions, active_accuracy)
 
@@ -217,8 +213,8 @@ def valid(model, testing_loader):
             tmp_eval_accuracy = accuracy_score(targets.cpu().numpy(), predictions.cpu().numpy())
             eval_accuracy += tmp_eval_accuracy
 
-    labels = [id2label[id.item()] for id in eval_labels]
-    predictions = [id2label[id.item()] for id in eval_preds]
+    labels = [id2label[id_.item()] for id_ in eval_labels]
+    predictions = [id2label[id_.item()] for id_ in eval_preds]
 
     eval_loss = eval_loss / nb_eval_steps
     eval_accuracy = eval_accuracy / nb_eval_steps
@@ -228,10 +224,10 @@ def valid(model, testing_loader):
 
 
 class DataSet(Dataset):
-    def __init__(self, X, Y, tokenizer, max_len):
-        self.len = len(X)
-        self.X = X
-        self.Y = Y
+    def __init__(self, x, y, tokenizer, max_len):
+        self.len = len(x)
+        self.X = x
+        self.Y = y
         self.tokenizer = tokenizer
         self.max_len = max_len
 
@@ -241,17 +237,17 @@ class DataSet(Dataset):
         word_labels = self.Y[index]
 
         # step 2: add special tokens and corresponding labels
-        tokenized_sentence = ["[CLS]"] + tokenized_sentence + ["[SEP]"] # add special tokens
-        word_labels = ["O"] + word_labels + ["O"] # add special tokens
+        tokenized_sentence = ["[CLS]"] + tokenized_sentence + ["[SEP]"]  # add special tokens
+        word_labels = ["O"] + word_labels + ["O"]  # add special tokens
 
         # step 3: truncating/padding
         maxlen = self.max_len
-        if len(tokenized_sentence) > maxlen: # truncate
-          tokenized_sentence = tokenized_sentence[:maxlen]
-          word_labels = word_labels[:maxlen]
+        if len(tokenized_sentence) > maxlen:  # truncate
+            tokenized_sentence = tokenized_sentence[:maxlen]
+            word_labels = word_labels[:maxlen]
         else:  # pad
-          tokenized_sentence = tokenized_sentence + ['[PAD]'for _ in range(maxlen - len(tokenized_sentence))]
-          word_labels = word_labels + ["O" for _ in range(maxlen - len(word_labels))]
+            tokenized_sentence = tokenized_sentence + ['[PAD]'for _ in range(maxlen - len(tokenized_sentence))]
+            word_labels = word_labels + ["O" for _ in range(maxlen - len(word_labels))]
 
         # step 4: obtain the attention mask
         attn_mask = [1 if tok != '[PAD]' else 0 for tok in tokenized_sentence]
@@ -316,10 +312,6 @@ if __name__ == '__main__':
     ids = ids.to(device)
     mask = mask.to(device)
     targets = targets.to(device)
-
-    outputs = model(input_ids=ids, attention_mask=mask, labels=targets)
-    initial_loss = outputs[0]
-    tr_logits = outputs[1]
 
     for epoch in range(EPOCHS):
         train(epoch)
